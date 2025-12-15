@@ -14,17 +14,16 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Scrape the Discogs sell page
-    const response = await fetch(
-      `https://www.discogs.com/sell/release/${release_id}?sort=price%2Casc`,
-      {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.5',
-        },
-      }
-    );
+    const targetUrl = `https://www.discogs.com/sell/release/${release_id}?sort=price%2Casc`;
+    
+    // Use allorigins.win as CORS proxy
+    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+    
+    const response = await fetch(proxyUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      },
+    });
 
     if (!response.ok) {
       return res.status(response.status).json({ error: `HTTP ${response.status}` });
@@ -35,69 +34,81 @@ export default async function handler(req, res) {
     // Parse listings from HTML
     const listings = [];
     
-    // Split by listing items
-    const itemBlocks = html.split(/class="shortcut_navigable/g);
+    // Look for seller links and prices in the HTML
+    // Pattern: seller username appears in links like /seller/USERNAME
+    const sellerPattern = /href="\/seller\/([^"\/]+)"/g;
+    const sellers = new Set();
+    let match;
     
-    for (let i = 1; i < itemBlocks.length; i++) {
-      const block = itemBlocks[i];
+    while ((match = sellerPattern.exec(html)) !== null) {
+      sellers.add(match[1]);
+    }
+    
+    // For each seller found, create a listing entry
+    // We'll extract more details with better regex
+    const rows = html.split(/class="[^"]*shortcut_navigable[^"]*"/g);
+    
+    for (let i = 1; i < rows.length && i <= 50; i++) {
+      const row = rows[i];
       
-      // Extract seller username
-      const sellerMatch = block.match(/href="\/seller\/([^\/?"]+)/);
-      const seller = sellerMatch ? sellerMatch[1] : null;
+      // Get seller
+      const sellerMatch = row.match(/\/seller\/([^"\/]+)/);
+      if (!sellerMatch) continue;
+      const seller = sellerMatch[1];
       
-      // Extract price - look for span with currency symbol
-      const priceMatch = block.match(/(?:€|£|\$|¥)\s*[\d,]+\.?\d*/);
+      // Get price - look for currency symbols followed by numbers
+      const priceMatch = row.match(/(?:€|EUR|USD|\$|£|GBP)\s*([\d,.]+)/i) ||
+                        row.match(/([\d,.]+)\s*(?:€|EUR|USD|\$|£|GBP)/i);
+      
+      let price = 0;
       let currency = 'EUR';
-      let priceValue = 0;
       
       if (priceMatch) {
-        const priceText = priceMatch[0];
-        if (priceText.includes('$')) currency = 'USD';
-        else if (priceText.includes('£')) currency = 'GBP';
-        else if (priceText.includes('¥')) currency = 'JPY';
-        priceValue = parseFloat(priceText.replace(/[€$£¥,\s]/g, ''));
+        price = parseFloat(priceMatch[1].replace(/,/g, '.').replace(/\.(?=.*\.)/g, ''));
+        if (row.includes('$') || row.includes('USD')) currency = 'USD';
+        else if (row.includes('£') || row.includes('GBP')) currency = 'GBP';
       }
       
-      // Extract condition from item condition text
-      const conditionMatch = block.match(/(?:Media|Condition)[^>]*>([^<]*(?:Mint|Near Mint|Very Good|Good|Fair|Poor)[^<]*)/i);
-      const condition = conditionMatch ? conditionMatch[1].trim() : 'Unknown';
+      // Get condition
+      let condition = 'Unknown';
+      const condMatch = row.match(/(Mint|Near Mint|Very Good Plus|Very Good|Good Plus|Good|Fair|Poor)\s*\(/i);
+      if (condMatch) condition = condMatch[1];
       
-      // Extract ships from country
-      const shipsMatch = block.match(/Ships\s*From[^>]*>[^>]*>([^<]+)/i) || 
-                        block.match(/flag-([a-z]{2})/i);
-      let shipsFrom = 'Unknown';
-      if (shipsMatch) {
-        shipsFrom = shipsMatch[1].trim();
-      }
+      // Get country - look for flag or country name
+      let country = 'Unknown';
+      const countryMatch = row.match(/Ships From:.*?>([^<]+)</i) ||
+                          row.match(/title="([^"]+)"[^>]*class="[^"]*flag/i);
+      if (countryMatch) country = countryMatch[1].trim();
       
-      // Extract seller rating
-      const ratingMatch = block.match(/([\d.]+)%/);
-      const rating = ratingMatch ? parseFloat(ratingMatch[1]) : null;
+      // Get rating
+      let rating = null;
+      const ratingMatch = row.match(/([\d.]+)%/);
+      if (ratingMatch) rating = parseFloat(ratingMatch[1]);
       
-      if (seller && priceValue > 0) {
+      if (seller && price > 0) {
         listings.push({
           seller: {
             username: seller,
-            stats: {
-              rating: rating,
-              total: 0
-            }
+            stats: { rating, total: 0 }
           },
-          price: {
-            value: priceValue,
-            currency: currency
-          },
-          condition: condition,
+          price: { value: price, currency },
+          condition,
           sleeve_condition: 'Unknown',
-          ships_from: shipsFrom
+          ships_from: country
         });
       }
     }
 
-    return res.status(200).json({ listings });
+    return res.status(200).json({ 
+      listings,
+      debug: {
+        sellersFound: sellers.size,
+        rowsFound: rows.length - 1
+      }
+    });
     
   } catch (error) {
-    console.error('Scraping error:', error);
+    console.error('Error:', error);
     return res.status(500).json({ error: error.message });
   }
 }
