@@ -752,7 +752,7 @@
     async function analyzeMarketplace(wantlist, onProgress) {
       const sellerInventory = {};
       const startTime = Date.now();
-      const BATCH_SIZE = 10; // 5 requêtes en parallèle
+      const BATCH_SIZE = 5; // 5 requêtes en parallèle
       
       // Traiter par batches
       for (let i = 0; i < wantlist.length; i += BATCH_SIZE) {
@@ -826,7 +826,7 @@
         
         // Délai entre les batches pour respecter le rate limit
         if (i + BATCH_SIZE < wantlist.length) {
-          await delay(800);
+          await delay(1200);
         }
       }
 
@@ -989,20 +989,30 @@
       try {
         // Step 1: Get wantlist
         const wantlist = await getWantlist(username, updateProgress);
-        // Free tier limit
-        const FREE_LIMIT = 50;
-        const limitedWantlist = wantlist.slice(0, FREE_LIMIT);
-        const isLimited = wantlist.length > FREE_LIMIT;
+
         if (wantlist.length === 0) {
           throw new Error('Wantlist is empty or private. Make sure your wantlist is public.');
         }
 
+        // Free tier limit
+        const FREE_LIMIT = 50;
+        const limitedWantlist = wantlist.slice(0, FREE_LIMIT);
+        const isLimited = wantlist.length > FREE_LIMIT;
+
         // Step 2: Analyze marketplace
-        const sellers = await analyzeMarketplace(wantlist, updateProgress);
+        const sellers = await analyzeMarketplace(limitedWantlist, updateProgress);
 
         // Step 3: Show results
         hideProgress();
-        renderResults(sellers, wantlist.length);
+        renderResults(sellers, limitedWantlist.length);
+
+        // Show upgrade message if limited
+        if (isLimited) {
+          const msg = document.createElement('div');
+          msg.style.cssText = 'background: rgba(255,107,53,0.1); border: 1px solid #ff6b35; border-radius: 12px; padding: 16px; margin-bottom: 20px; text-align: center; color: #fff;';
+          msg.innerHTML = `⚡ Free tier: analyzed ${FREE_LIMIT} of ${wantlist.length} items. <a href="index.html#pricing" style="color: #ff6b35; text-decoration: underline;">Upgrade to Pro</a> for full wantlist analysis.`;
+          document.getElementById('resultsSection').prepend(msg);
+        }
 
       } catch (error) {
         hideProgress();

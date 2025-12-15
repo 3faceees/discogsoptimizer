@@ -15,8 +15,9 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Use marketplace/search endpoint instead
     const response = await fetch(
-      `https://api.discogs.com/marketplace/listings?release_id=${release_id}&status=For%20Sale`,
+      `https://api.discogs.com/marketplace/search?release_id=${release_id}&format=Vinyl`,
       {
         headers: {
           'User-Agent': 'DiscogsOptimizer/1.0',
