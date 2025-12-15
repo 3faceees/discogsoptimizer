@@ -989,7 +989,10 @@
       try {
         // Step 1: Get wantlist
         const wantlist = await getWantlist(username, updateProgress);
-
+        // Free tier limit
+        const FREE_LIMIT = 50;
+        const limitedWantlist = wantlist.slice(0, FREE_LIMIT);
+        const isLimited = wantlist.length > FREE_LIMIT;
         if (wantlist.length === 0) {
           throw new Error('Wantlist is empty or private. Make sure your wantlist is public.');
         }
