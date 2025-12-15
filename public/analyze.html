@@ -752,70 +752,82 @@
     async function analyzeMarketplace(wantlist, onProgress) {
       const sellerInventory = {};
       const startTime = Date.now();
-
-      for (let i = 0; i < wantlist.length; i++) {
-        const item = wantlist[i];
-        const releaseId = item.basic_information.id;
-        const artist = item.basic_information.artists?.[0]?.name || 'Unknown';
-        const title = item.basic_information.title;
-        const releaseTitle = `${artist} - ${title}`;
-
-        // Calculate ETA
-        const elapsed = (Date.now() - startTime) / 1000;
-        const processed = i + 1;
-        const avgTime = elapsed / processed;
-        const eta = avgTime * (wantlist.length - i - 1);
-
-        onProgress({
-          phase: 'analyze',
-          current: i + 1,
-          total: wantlist.length,
-          currentItem: releaseTitle,
-          eta: eta
+      const BATCH_SIZE = 5; // 5 requêtes en parallèle
+      
+      // Traiter par batches
+      for (let i = 0; i < wantlist.length; i += BATCH_SIZE) {
+        const batch = wantlist.slice(i, i + BATCH_SIZE);
+        
+        // Lancer les requêtes en parallèle
+        const promises = batch.map(async (item) => {
+          const releaseId = item.basic_information.id;
+          const artist = item.basic_information.artists?.[0]?.name || 'Unknown';
+          const title = item.basic_information.title;
+          const releaseTitle = `${artist} - ${title}`;
+          
+          try {
+            const url = `${API_BASE}/listings?release_id=${releaseId}`;
+            const data = await fetchJSON(url);
+            return { releaseId, releaseTitle, listings: data.listings || [] };
+          } catch (e) {
+            console.log(`Error fetching ${releaseId}:`, e);
+            return { releaseId, releaseTitle, listings: [] };
+          }
         });
-
-        try {
-          const url = `${API_BASE}/listings?release_id=${releaseId}`;
-          const data = await fetchJSON(url);
-
-          if (data.listings?.length > 0) {
-            for (const listing of data.listings) {
-              const seller = listing.seller?.username;
-              if (seller) {
-                if (!sellerInventory[seller]) {
-                  sellerInventory[seller] = {
-                    username: seller,
-                    rating: listing.seller?.stats?.rating || 'N/A',
-                    totalSales: listing.seller?.stats?.total || 0,
-                    items: [],
-                    countries: new Set(),
-                  };
-                }
-
-                // Avoid duplicates
-                if (!sellerInventory[seller].items.find(x => x.releaseId === releaseId)) {
-                  sellerInventory[seller].items.push({
-                    releaseId,
-                    title: releaseTitle,
-                    price: listing.price?.value,
-                    currency: listing.price?.currency,
-                    condition: listing.condition,
-                    sleeveCondition: listing.sleeve_condition,
-                  });
-                }
-
-                if (listing.ships_from) {
-                  sellerInventory[seller].countries.add(listing.ships_from);
-                }
+        
+        const results = await Promise.all(promises);
+        
+        // Traiter les résultats
+        for (const { releaseId, releaseTitle, listings } of results) {
+          for (const listing of listings) {
+            const seller = listing.seller?.username;
+            if (seller) {
+              if (!sellerInventory[seller]) {
+                sellerInventory[seller] = {
+                  username: seller,
+                  rating: listing.seller?.stats?.rating || 'N/A',
+                  totalSales: listing.seller?.stats?.total || 0,
+                  items: [],
+                  countries: new Set(),
+                };
+              }
+              
+              if (!sellerInventory[seller].items.find(x => x.releaseId === releaseId)) {
+                sellerInventory[seller].items.push({
+                  releaseId,
+                  title: releaseTitle,
+                  price: listing.price?.value,
+                  currency: listing.price?.currency,
+                  condition: listing.condition,
+                  sleeveCondition: listing.sleeve_condition,
+                });
+              }
+              
+              if (listing.ships_from) {
+                sellerInventory[seller].countries.add(listing.ships_from);
               }
             }
           }
-        } catch (e) {
-          // Skip errors for individual releases
-          console.log(`Error fetching ${releaseId}:`, e);
         }
-
-        await delay(RATE_LIMIT_DELAY);
+        
+        // Update progress
+        const processed = Math.min(i + BATCH_SIZE, wantlist.length);
+        const elapsed = (Date.now() - startTime) / 1000;
+        const avgTime = elapsed / processed;
+        const eta = avgTime * (wantlist.length - processed);
+        
+        onProgress({
+          phase: 'analyze',
+          current: processed,
+          total: wantlist.length,
+          currentItem: `Batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(wantlist.length / BATCH_SIZE)}`,
+          eta: eta
+        });
+        
+        // Délai entre les batches pour respecter le rate limit
+        if (i + BATCH_SIZE < wantlist.length) {
+          await delay(1200);
+        }
       }
 
       return Object.values(sellerInventory)
