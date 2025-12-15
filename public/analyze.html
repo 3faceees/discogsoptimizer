@@ -829,21 +829,28 @@
 
     function showError(message) {
       const el = document.getElementById('errorMessage');
-      el.textContent = '⚠️ ' + message;
-      el.classList.add('active');
+      if (el) {
+        el.textContent = '⚠️ ' + message;
+        el.classList.add('active');
+      }
+      console.error('Error:', message);
     }
 
     function hideError() {
-      document.getElementById('errorMessage').classList.remove('active');
+      const el = document.getElementById('errorMessage');
+      if (el) el.classList.remove('active');
     }
 
     function showProgress() {
-      document.getElementById('progressSection').classList.add('active');
-      document.getElementById('resultsSection').classList.remove('active');
+      const progressSection = document.getElementById('progressSection');
+      const resultsSection = document.getElementById('resultsSection');
+      if (progressSection) progressSection.classList.add('active');
+      if (resultsSection) resultsSection.classList.remove('active');
     }
 
     function hideProgress() {
-      document.getElementById('progressSection').classList.remove('active');
+      const el = document.getElementById('progressSection');
+      if (el) el.classList.remove('active');
     }
 
     function updateProgress(data) {
@@ -852,6 +859,11 @@
       const progressBar = document.getElementById('progressBar');
       const progressDetail = document.getElementById('progressDetail');
       const progressEta = document.getElementById('progressEta');
+
+      if (!progressText || !progressStats || !progressBar || !progressDetail) {
+        console.error('Progress elements not found');
+        return;
+      }
 
       if (data.phase === 'wantlist') {
         progressText.textContent = 'Loading wantlist...';
@@ -863,7 +875,7 @@
         progressStats.textContent = `${data.current}/${data.total}`;
         progressBar.style.width = `${(data.current / data.total) * 100}%`;
         progressDetail.innerHTML = `${data.currentItem.substring(0, 60)}${data.currentItem.length > 60 ? '...' : ''}`;
-        progressEta.textContent = ` · ETA: ${formatTime(data.eta)}`;
+        if (progressEta) progressEta.textContent = ` · ETA: ${formatTime(data.eta)}`;
       }
     }
 
