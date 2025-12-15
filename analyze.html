@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Analyze Wantlist - DiscogsOptimizer</title>
+  <meta name="description" content="Find the sellers with the most records from your Discogs wantlist.">
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg-primary: #0a0a0a;
+      --bg-secondary: #111111;
+      --bg-card: #161616;
+      --text-primary: #ffffff;
+      --text-secondary: #888888;
+      --text-muted: #555555;
+      --accent: #ff6b35;
+      --accent-gold: #f7c94b;
+      --accent-glow: rgba(255, 107, 53, 0.4);
+      --border: #222222;
+      --success: #4ade80;
+      --error: #f87171;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* Grain overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+      opacity: 0.03;
+      pointer-events: none;
+      z-index: 1000;
+    }
+
+    /* Navigation */
+    nav {
+      padding: 20px 40px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .logo {
+      font-family: 'Poppins', sans-serif;
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--text-primary);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      background: conic-gradient(from 0deg, #1a1a1a, #333, #1a1a1a, #333, #1a1a1a);
+      border-radius: 50%;
+      position: relative;
+    }
+
+    .logo-icon::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 10px;
+      height: 10px;
+      background: var(--accent);
+      border-radius: 50%;
+    }
+
+    .logo-icon::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 4px;
+      height: 4px;
+      background: var(--bg-primary);
+      border-radius: 50%;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 30px;
+      align-items: center;
+    }
+
+    .nav-links a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      transition: color 0.3s;
+    }
+
+    .nav-links a:hover {
+      color: var(--text-primary);
+    }
+
+    /* Main Content */
+    .main {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 60px 40px;
+    }
+
+    .page-header {
+      text-align: center;
+      margin-bottom: 50px;
+    }
+
+    .page-header h1 {
+      font-family: 'Poppins', sans-serif;
+      font-size: 36px;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+
+    .page-header p {
+      color: var(--text-secondary);
+      font-size: 16px;
+    }
+
+    /* Search Box */
+    .search-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 40px;
+      margin-bottom: 40px;
+    }
+
+    .search-form {
+      display: flex;
+      gap: 16px;
+      align-items: flex-end;
+    }
+
+    .form-group {
+      flex: 1;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 16px 20px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 16px;
+      transition: all 0.3s;
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    .form-group input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .btn {
+      padding: 16px 32px;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 15px;
+      cursor: pointer;
+      transition: all 0.3s;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      border: none;
+      font-family: inherit;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: var(--bg-primary);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: #ff8555;
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px var(--accent-glow);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* Progress */
+    .progress-section {
+      display: none;
+      margin-bottom: 40px;
+    }
+
+    .progress-section.active {
+      display: block;
+    }
+
+    .progress-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 30px;
+    }
+
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .progress-status {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .spinner {
+      width: 24px;
+      height: 24px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .progress-text {
+      font-weight: 500;
+    }
+
+    .progress-stats {
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+
+    .progress-bar-container {
+      height: 8px;
+      background: var(--bg-secondary);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-gold));
+      border-radius: 4px;
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+
+    .progress-detail {
+      font-size: 13px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .eta {
+      color: var(--accent-gold);
+      font-weight: 500;
+    }
+
+    /* Results */
+    .results-section {
+      display: none;
+    }
+
+    .results-section.active {
+      display: block;
+    }
+
+    .results-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+
+    .results-header h2 {
+      font-family: 'Poppins', sans-serif;
+      font-size: 24px;
+      font-weight: 700;
+    }
+
+    .results-count {
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+
+    .seller-list {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .seller-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      transition: all 0.3s;
+      cursor: pointer;
+    }
+
+    .seller-card:hover {
+      border-color: var(--text-muted);
+      transform: translateX(4px);
+    }
+
+    .seller-card.top {
+      border-color: var(--accent);
+      background: linear-gradient(135deg, var(--bg-card), rgba(255, 107, 53, 0.05));
+    }
+
+    .seller-main {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .seller-info {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .seller-rank {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Poppins', sans-serif;
+      font-weight: 700;
+      font-size: 16px;
+    }
+
+    .seller-card.top .seller-rank {
+      background: var(--accent);
+      color: var(--bg-primary);
+    }
+
+    .seller-card:not(.top) .seller-rank {
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
+    }
+
+    .seller-details h3 {
+      font-size: 17px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .seller-details h3 a {
+      color: var(--text-primary);
+      text-decoration: none;
+      transition: color 0.3s;
+    }
+
+    .seller-details h3 a:hover {
+      color: var(--accent);
+    }
+
+    .seller-meta {
+      font-size: 13px;
+      color: var(--text-secondary);
+      display: flex;
+      gap: 12px;
+    }
+
+    .seller-count {
+      text-align: right;
+    }
+
+    .seller-count-number {
+      font-family: 'Poppins', sans-serif;
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--accent);
+      line-height: 1;
+    }
+
+    .seller-count-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    /* Expanded items */
+    .seller-items {
+      display: none;
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+    }
+
+    .seller-card.expanded .seller-items {
+      display: block;
+    }
+
+    .seller-items-header {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    .item-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      background: var(--bg-secondary);
+      border-radius: 10px;
+      font-size: 14px;
+    }
+
+    .item-title {
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-right: 16px;
+    }
+
+    .item-title a {
+      color: var(--text-primary);
+      text-decoration: none;
+    }
+
+    .item-title a:hover {
+      color: var(--accent);
+    }
+
+    .item-price {
+      color: var(--success);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .item-condition {
+      color: var(--text-muted);
+      font-size: 12px;
+      margin-left: 12px;
+    }
+
+    .show-more {
+      margin-top: 12px;
+      font-size: 13px;
+      color: var(--accent);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .show-more:hover {
+      text-decoration: underline;
+    }
+
+    /* Error */
+    .error-message {
+      display: none;
+      background: rgba(248, 113, 113, 0.1);
+      border: 1px solid rgba(248, 113, 113, 0.3);
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 24px;
+      color: var(--error);
+    }
+
+    .error-message.active {
+      display: block;
+    }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-secondary);
+    }
+
+    .empty-state-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+
+    /* Footer */
+    footer {
+      padding: 30px 40px;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    footer a {
+      color: var(--text-secondary);
+      text-decoration: none;
+    }
+
+    footer a:hover {
+      color: var(--text-primary);
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      nav {
+        padding: 16px 20px;
+      }
+
+      .nav-links {
+        display: none;
+      }
+
+      .main {
+        padding: 40px 20px;
+      }
+
+      .search-form {
+        flex-direction: column;
+      }
+
+      .btn {
+        width: 100%;
+        justify-content: center;
+      }
+
+      .seller-main {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+      }
+
+      .seller-count {
+        text-align: left;
+      }
+
+      .item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+      }
+
+      .item-title {
+        white-space: normal;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="index.html" class="logo">
+      <div class="logo-icon"></div>
+      DiscogsOptimizer
+    </a>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="index.html#features">Features</a>
+      <a href="index.html#pricing">Pricing</a>
+    </div>
+  </nav>
+
+  <main class="main">
+    <div class="page-header">
+      <h1>Analyze Your Wantlist</h1>
+      <p>Find which sellers have the most records from your Discogs wantlist</p>
+    </div>
+
+    <div class="search-box">
+      <form class="search-form" id="searchForm">
+        <div class="form-group">
+          <label for="username">Discogs Username</label>
+          <input 
+            type="text" 
+            id="username" 
+            placeholder="Enter your Discogs username"
+            required
+          >
+        </div>
+        <button type="submit" class="btn btn-primary" id="analyzeBtn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.35-4.35"></path>
+          </svg>
+          Analyze
+        </button>
+      </form>
+    </div>
+
+    <div class="error-message" id="errorMessage"></div>
+
+    <div class="progress-section" id="progressSection">
+      <div class="progress-box">
+        <div class="progress-header">
+          <div class="progress-status">
+            <div class="spinner"></div>
+            <span class="progress-text" id="progressText">Loading wantlist...</span>
+          </div>
+          <div class="progress-stats" id="progressStats"></div>
+        </div>
+        <div class="progress-bar-container">
+          <div class="progress-bar" id="progressBar"></div>
+        </div>
+        <div class="progress-detail" id="progressDetail">
+          <span class="eta" id="progressEta"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="results-section" id="resultsSection">
+      <div class="results-header">
+        <h2>🏆 Top Sellers</h2>
+        <span class="results-count" id="resultsCount"></span>
+      </div>
+      <div class="seller-list" id="sellerList"></div>
+    </div>
+  </main>
+
+  <footer>
+    <a href="index.html">DiscogsOptimizer</a> · Made for vinyl lovers
+  </footer>
+
+  <script>
+    const API_BASE = '/api';
+    const RATE_LIMIT_DELAY = 1100; // ms between requests
+
+    let abortController = null;
+
+    function delay(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    function formatTime(seconds) {
+      const mins = Math.floor(seconds / 60);
+      const secs = Math.floor(seconds % 60);
+      if (mins > 0) return `${mins}m ${secs}s`;
+      return `${secs}s`;
+    }
+
+    async function fetchJSON(url, retries = 3) {
+      for (let i = 0; i < retries; i++) {
+        try {
+          const response = await fetch(url);
+          if (response.status === 429) {
+            // Rate limited
+            await delay(60000);
+            continue;
+          }
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+          return await response.json();
+        } catch (e) {
+          if (i === retries - 1) throw e;
+          await delay(2000);
+        }
+      }
+    }
+
+    async function getWantlist(username, onProgress) {
+      let allItems = [];
+      let page = 1;
+      let totalPages = 1;
+
+      do {
+        const url = `${API_BASE}/wantlist?username=${username}&page=${page}`;
+        const data = await fetchJSON(url);
+        
+        if (data.message) {
+          throw new Error(data.message);
+        }
+
+        totalPages = data.pagination?.pages || 1;
+        allItems = [...allItems, ...(data.wants || [])];
+        
+        onProgress({
+          phase: 'wantlist',
+          current: page,
+          total: totalPages,
+          items: allItems.length
+        });
+
+        page++;
+        if (page <= totalPages) await delay(RATE_LIMIT_DELAY);
+      } while (page <= totalPages);
+
+      return allItems;
+    }
+
+    async function analyzeMarketplace(wantlist, onProgress) {
+      const sellerInventory = {};
+      const startTime = Date.now();
+
+      for (let i = 0; i < wantlist.length; i++) {
+        const item = wantlist[i];
+        const releaseId = item.basic_information.id;
+        const artist = item.basic_information.artists?.[0]?.name || 'Unknown';
+        const title = item.basic_information.title;
+        const releaseTitle = `${artist} - ${title}`;
+
+        // Calculate ETA
+        const elapsed = (Date.now() - startTime) / 1000;
+        const processed = i + 1;
+        const avgTime = elapsed / processed;
+        const eta = avgTime * (wantlist.length - i - 1);
+
+        onProgress({
+          phase: 'analyze',
+          current: i + 1,
+          total: wantlist.length,
+          currentItem: releaseTitle,
+          eta: eta
+        });
+
+        try {
+          const url = `${API_BASE}/listings?release_id=${releaseId}`;
+          const data = await fetchJSON(url);
+
+          if (data.listings?.length > 0) {
+            for (const listing of data.listings) {
+              const seller = listing.seller?.username;
+              if (seller) {
+                if (!sellerInventory[seller]) {
+                  sellerInventory[seller] = {
+                    username: seller,
+                    rating: listing.seller?.stats?.rating || 'N/A',
+                    totalSales: listing.seller?.stats?.total || 0,
+                    items: [],
+                    countries: new Set(),
+                  };
+                }
+
+                // Avoid duplicates
+                if (!sellerInventory[seller].items.find(x => x.releaseId === releaseId)) {
+                  sellerInventory[seller].items.push({
+                    releaseId,
+                    title: releaseTitle,
+                    price: listing.price?.value,
+                    currency: listing.price?.currency,
+                    condition: listing.condition,
+                    sleeveCondition: listing.sleeve_condition,
+                  });
+                }
+
+                if (listing.ships_from) {
+                  sellerInventory[seller].countries.add(listing.ships_from);
+                }
+              }
+            }
+          }
+        } catch (e) {
+          // Skip errors for individual releases
+          console.log(`Error fetching ${releaseId}:`, e);
+        }
+
+        await delay(RATE_LIMIT_DELAY);
+      }
+
+      return Object.values(sellerInventory)
+        .map(s => ({
+          ...s,
+          count: s.items.length,
+          countries: Array.from(s.countries)
+        }))
+        .sort((a, b) => b.count - a.count);
+    }
+
+    function showError(message) {
+      const el = document.getElementById('errorMessage');
+      el.textContent = '⚠️ ' + message;
+      el.classList.add('active');
+    }
+
+    function hideError() {
+      document.getElementById('errorMessage').classList.remove('active');
+    }
+
+    function showProgress() {
+      document.getElementById('progressSection').classList.add('active');
+      document.getElementById('resultsSection').classList.remove('active');
+    }
+
+    function hideProgress() {
+      document.getElementById('progressSection').classList.remove('active');
+    }
+
+    function updateProgress(data) {
+      const progressText = document.getElementById('progressText');
+      const progressStats = document.getElementById('progressStats');
+      const progressBar = document.getElementById('progressBar');
+      const progressDetail = document.getElementById('progressDetail');
+      const progressEta = document.getElementById('progressEta');
+
+      if (data.phase === 'wantlist') {
+        progressText.textContent = 'Loading wantlist...';
+        progressStats.textContent = `${data.items} items`;
+        progressBar.style.width = `${(data.current / data.total) * 100}%`;
+        progressDetail.textContent = `Page ${data.current} of ${data.total}`;
+      } else if (data.phase === 'analyze') {
+        progressText.textContent = 'Analyzing marketplace...';
+        progressStats.textContent = `${data.current}/${data.total}`;
+        progressBar.style.width = `${(data.current / data.total) * 100}%`;
+        progressDetail.innerHTML = `${data.currentItem.substring(0, 60)}${data.currentItem.length > 60 ? '...' : ''}`;
+        progressEta.textContent = ` · ETA: ${formatTime(data.eta)}`;
+      }
+    }
+
+    function renderResults(sellers, wantlistCount) {
+      document.getElementById('resultsSection').classList.add('active');
+      document.getElementById('resultsCount').textContent = 
+        `${sellers.length} sellers found · ${wantlistCount} wantlist items analyzed`;
+
+      const container = document.getElementById('sellerList');
+
+      if (sellers.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">📭</div>
+            <p>No sellers found with items from your wantlist.</p>
+          </div>
+        `;
+        return;
+      }
+
+      const top25 = sellers.slice(0, 25);
+      
+      container.innerHTML = top25.map((seller, index) => `
+        <div class="seller-card ${index === 0 ? 'top' : ''}" data-seller="${seller.username}">
+          <div class="seller-main">
+            <div class="seller-info">
+              <div class="seller-rank">${index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}</div>
+              <div class="seller-details">
+                <h3>
+                  <a href="https://www.discogs.com/seller/${seller.username}/profile" target="_blank" rel="noopener">
+                    ${seller.username} ↗
+                  </a>
+                </h3>
+                <div class="seller-meta">
+                  <span>${seller.countries.join(', ')}</span>
+                  <span>·</span>
+                  <span>${seller.rating}% rating</span>
+                  <span>·</span>
+                  <span>${seller.totalSales.toLocaleString()} sales</span>
+                </div>
+              </div>
+            </div>
+            <div class="seller-count">
+              <div class="seller-count-number">${seller.count}</div>
+              <div class="seller-count-label">records</div>
+            </div>
+          </div>
+          <div class="seller-items">
+            <div class="seller-items-header">Available from your wantlist:</div>
+            <div class="item-list">
+              ${seller.items.slice(0, 5).map(item => `
+                <div class="item">
+                  <div class="item-title">
+                    <a href="https://www.discogs.com/release/${item.releaseId}" target="_blank" rel="noopener">
+                      ${item.title}
+                    </a>
+                  </div>
+                  <div>
+                    <span class="item-price">${item.price} ${item.currency}</span>
+                    <span class="item-condition">${item.condition}</span>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+            ${seller.items.length > 5 ? `
+              <div class="show-more">+ ${seller.items.length - 5} more records</div>
+            ` : ''}
+          </div>
+        </div>
+      `).join('');
+
+      // Add click handlers to expand/collapse
+      container.querySelectorAll('.seller-card').forEach(card => {
+        card.addEventListener('click', (e) => {
+          if (e.target.tagName === 'A') return; // Don't toggle when clicking links
+          card.classList.toggle('expanded');
+        });
+      });
+    }
+
+    // Form submit handler
+    document.getElementById('searchForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const username = document.getElementById('username').value.trim();
+      if (!username) return;
+
+      const analyzeBtn = document.getElementById('analyzeBtn');
+      analyzeBtn.disabled = true;
+      analyzeBtn.innerHTML = `
+        <div class="spinner" style="width: 18px; height: 18px; border-width: 2px;"></div>
+        Analyzing...
+      `;
+
+      hideError();
+      showProgress();
+      document.getElementById('resultsSection').classList.remove('active');
+
+      try {
+        // Step 1: Get wantlist
+        const wantlist = await getWantlist(username, updateProgress);
+
+        if (wantlist.length === 0) {
+          throw new Error('Wantlist is empty or private. Make sure your wantlist is public.');
+        }
+
+        // Step 2: Analyze marketplace
+        const sellers = await analyzeMarketplace(wantlist, updateProgress);
+
+        // Step 3: Show results
+        hideProgress();
+        renderResults(sellers, wantlist.length);
+
+      } catch (error) {
+        hideProgress();
+        showError(error.message || 'An error occurred. Please try again.');
+      } finally {
+        analyzeBtn.disabled = false;
+        analyzeBtn.innerHTML = `
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.35-4.35"></path>
+          </svg>
+          Analyze
+        `;
+      }
+    });
+  </script>
+</body>
+</html>
