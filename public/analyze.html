@@ -752,7 +752,7 @@
     async function analyzeMarketplace(wantlist, onProgress) {
       const sellerInventory = {};
       const startTime = Date.now();
-      const BATCH_SIZE = 5; // 5 requêtes en parallèle
+      const BATCH_SIZE = 10; // 5 requêtes en parallèle
       
       // Traiter par batches
       for (let i = 0; i < wantlist.length; i += BATCH_SIZE) {
@@ -826,7 +826,7 @@
         
         // Délai entre les batches pour respecter le rate limit
         if (i + BATCH_SIZE < wantlist.length) {
-          await delay(1200);
+          await delay(800);
         }
       }
 
